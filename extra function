@@ -1,0 +1,72 @@
+
+def create_new_sheet(SAVE_PATH):
+    # Load workbook and select sheet
+    wb = openpyxl.load_workbook(SAVE_PATH, data_only=True)
+    ws = wb['UOM']
+
+    # Find the header row and extract column names
+    cols = None
+    for row in ws.iter_rows(min_row=12, max_row=12, values_only=True):
+        cols = list(row)
+
+    # Collect data rows
+    data_rows = []
+    for row in ws.iter_rows(min_row=13, values_only=True):
+        data_rows.append(list(row))
+
+    # Find the unique tests and calculate average uncertainty
+    unique_tests = set(row[cols.index('Test')] for row in data_rows)
+    result_data = [['Test', 'Average Extended Uncertainty']]
+
+
+    # Create a new workbook and a new sheet
+    wb_new = openpyxl.Workbook()
+    ws_new = wb_new.active
+    ws_new.title = 'SANAS'
+
+    # Write the data to the new sheet
+    for row_data in result_data:
+        ws_new.append(row_data)
+
+    # Save the new workbook
+    wb_new.save(SAVE_PATH)
+
+WORKING:
+
+def copy_calculated_parameter_to_new_sheet(save_path, parameter="Extended Uncertainty  UOM% (U)", new_sheet_name="Extended_Uncertainty_Data"):
+    """
+    Copy the results of the calculated parameter from the 'UOM' sheet to a new sheet.
+
+    Args:
+        save_path (str): The path where the Excel file is saved.
+        parameter (str): The parameter to be copied.
+        new_sheet_name (str): The name of the new sheet where the data will be copied.
+    """
+
+    # Automate Excel to open, recalculate formulas, save, and close
+    excel = win32.gencache.EnsureDispatch('Excel.Application')
+    excel.Visible = True  # Make Excel visible (you can set it to False if you want it to run in the background)
+    wb = excel.Workbooks.Open(Filename=os.path.abspath(save_path))
+    excel.Calculate()  # Recalculate formulas
+    wb.Save()
+    excel.Application.Quit()
+
+    # Now load the workbook with openpyxl and get updated formula results
+    wb = load_workbook(filename=save_path, data_only=True)
+    ws = wb['UOM']  # Assuming the 'UOM' sheet contains the data
+
+    # Create DataFrame from the data in the 'UOM' sheet
+    data = pd.DataFrame(ws.values)
+
+    # Set the header row as the DataFrame header
+    data.columns = data.iloc[11]
+    data = data.iloc[12:]
+
+    # Extract the column of the parameter and drop NaN values
+    data = data[parameter].dropna()
+
+    # Write the data to a new sheet in the workbook
+    with pd.ExcelWriter(save_path, engine='openpyxl', mode='a') as writer:  # mode='a' to append the new sheet
+        data.to_excel(writer, sheet_name=new_sheet_name, index=False)
+
+    print(f"Data copied to new sheet '{new_sheet_name}' in workbook '{save_path}'.")
